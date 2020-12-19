@@ -11,7 +11,7 @@ import logging
 import multiprocessing_logging
 
 
-def parse_metadata(xml_metadata, queue):
+def parse_metadata(xml_metadata, output_file):
     xml_tree = parseString(xml_metadata)
     id = xml_tree.getElementsByTagName('id')[0].childNodes[0].nodeValue
     submitter = xml_tree.getElementsByTagName('submitter')[0].childNodes[0].nodeValue
@@ -57,21 +57,23 @@ def parse_metadata(xml_metadata, queue):
         if len(tmp) > 2:
             authors_parsed.append(
                 [i.strip().split()[0].strip(), i.strip().split()[1].strip(), i.strip().split()[2].strip()])
-    queue.append(
+    jsond = json.dumps(
         {'id': id, 'submitter': submitter, 'authors': authors, "title": title, "comments": comments, "doi": doi,
          "journal_ref": journal_ref, "report_no": report_no, "categories": categories, "license": license,
          "abstract": abstract, "versions": versions, "update_date": update_date,
          "authors_parsed": authors_parsed})
+    with open(output_file, 'a+') as fout:
+        fout.write(jsond + '\n')
 
 
-def download_metadata(arxiv_id, queue):
+def download_metadata(arxiv_id, output_file):
     try:
         xml_metadata = requests.get(
             "http://export.arxiv.org/oai2?verb=GetRecord&identifier=oai:arXiv.org:{0}&metadataPrefix=arXivRaw".format(
                 arxiv_id)).content.decode()
         if "idDoesNotExist" in xml_metadata:
             return
-        parse_metadata(xml_metadata, queue)
+        parse_metadata(xml_metadata, output_file)
         logging.info("arxiv_id {0} finish".format(arxiv_id))
         if sys.platform == 'win32':
             print("INFO:arxiv_id {0} finish".format(arxiv_id))
@@ -91,12 +93,12 @@ def parse_argument(args):
                         help="The start (contain) year and month, in format yymm, like 1101 (rep Jan 2011)")
     parser.add_argument("-e", "--end-yymm", type=str, default="2012",
                         help="The end (contain) year and month, in format yymm, like 1101 (rep Jan 2011)")
-    parser.add_argument("-m", "--maximum", type=int, default=9999999999,
+    parser.add_argument("-m", "--maximum", type=int, default=1073741824,
                         help="Maximum metadata number. Specify this if you only want a small amount of metadata")
     parser.add_argument("-p", "--process", type=int, default=1,
                         help="Use multi-process to download.")
     parser.add_argument("-r", "--recover", type=str, default="",
-                        help="Retry failed download specify filename like arxiv_download_error.log")
+                        help="Download some arxiv_id specified by file like arxiv_download_error.log")
     parser.add_argument("-d", "--download", type=str, default="",
                         help="Download the given arxiv_id only.")
     return parser.parse_args(args)
@@ -150,12 +152,11 @@ if __name__ == "__main__":
         logging.warning(
             "Please notice that terms of Use for arXiv APIs limited the maximum connection to 1 every 3 seconds.")
     pool = multiprocessing.Pool(processes=args_dict.process)
-    manager = multiprocessing.Manager()
-    metadata_list = manager.list()
+    output_file = "metadata_{0}.json".format(time.strftime("%y%m%d%H%M%S", time.localtime()))
+    with open(output_file, 'w') as fout:
+        pass
     for i in download_arxiv_id_list:
-        pool.apply_async(download_metadata, (i, metadata_list,))
+        pool.apply_async(download_metadata, (i, output_file,))
         time.sleep(3)
     pool.close()
     pool.join()
-    with open("metadata_{0}.json".format(time.strftime("%y%m%d%H%M%S", time.localtime())), 'w') as fout:
-        json.dump(list(metadata_list), fout)
