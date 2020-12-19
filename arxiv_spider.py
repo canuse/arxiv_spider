@@ -1,9 +1,14 @@
+import os
+import sys
+import time
+
 import requests
-import argparse
+from argparse import ArgumentParser
 import multiprocessing
 from xml.dom.minidom import parseString
 import json
 import logging
+import multiprocessing_logging
 
 
 def parse_metadata(xml_metadata, queue):
@@ -29,7 +34,10 @@ def parse_metadata(xml_metadata, queue):
     else:
         report_no = xml_tree.getElementsByTagName('report-no')[0].childNodes[0].nodeValue
     categories = xml_tree.getElementsByTagName('categories')[0].childNodes[0].nodeValue
-    license = xml_tree.getElementsByTagName('license')[0].childNodes[0].nodeValue
+    if len(xml_tree.getElementsByTagName('license')) == 0:
+        license = None
+    else:
+        license = xml_tree.getElementsByTagName('license')[0].childNodes[0].nodeValue
     abstract = xml_tree.getElementsByTagName('abstract')[0].childNodes[0].nodeValue
     raw_versions = xml_tree.getElementsByTagName('version')
     versions = []
@@ -63,28 +71,91 @@ def download_metadata(arxiv_id, queue):
                 arxiv_id)).content.decode()
         if "idDoesNotExist" in xml_metadata:
             return
-        parse_metadata(metadata_list, queue)
+        parse_metadata(xml_metadata, queue)
         logging.info("arxiv_id {0} finish".format(arxiv_id))
+        if sys.platform == 'win32':
+            print("INFO:arxiv_id {0} finish".format(arxiv_id))
+
         return
     except:
+        if sys.platform == 'win32':
+            print("ERROR:error in downloading metadata of arxiv_id {0}".format(arxiv_id))
         logging.error("error in downloading metadata of arxiv_id {0}".format(arxiv_id))
         with open("arxiv_download_error.log", 'a+') as ferr:
             ferr.write("{0}\n".format(arxiv_id))
 
 
+def parse_argument(args):
+    parser = ArgumentParser()
+    parser.add_argument("-s", "--start-yymm", type=str, default="0704",
+                        help="The start (contain) year and month, in format yymm, like 1101 (rep Jan 2011)")
+    parser.add_argument("-e", "--end-yymm", type=str, default="2012",
+                        help="The end (contain) year and month, in format yymm, like 1101 (rep Jan 2011)")
+    parser.add_argument("-m", "--maximum", type=int, default=9999999999,
+                        help="Maximum metadata number. Specify this if you only want a small amount of metadata")
+    parser.add_argument("-p", "--process", type=int, default=1,
+                        help="Use multi-process to download.")
+    parser.add_argument("-r", "--recover", type=str, default="",
+                        help="Retry failed download specify filename like arxiv_download_error.log")
+    parser.add_argument("-d", "--download", type=str, default="",
+                        help="Download the given arxiv_id only.")
+    return parser.parse_args(args)
+
+
+def id2month(i: int) -> int:
+    a = (i - 101) % 12
+    if a != 0:
+        return a
+    else:
+        return 12
+
+
 if __name__ == "__main__":
-    with open("arxiv_download_error.log", 'w') as ferr:
-        pass
-    pool = multiprocessing.Pool(processes=4)
+    logging.basicConfig(level=logging.INFO)
+    multiprocessing_logging.install_mp_handler()
+    args_dict = parse_argument(sys.argv[1:])
+    download_arxiv_id_list = []
+    try:
+        raw_submit_number = requests.get("https://arxiv.org/stats/get_monthly_submissions").content.decode()
+        submit_number = [int(x.split(',')[1]) for x in raw_submit_number.split()[1:]]
+    except:
+        logging.error("Fail to connect to arxiv. Please check your network status")
+        exit(-1)
+    if len(args_dict.download) > 1:
+        download_arxiv_id_list.append(args_dict.download)
+    elif len(args_dict.recover) > 1:
+        with open(args_dict.recover, 'r') as fin:
+            for i in fin.readlines():
+                download_arxiv_id_list.append(i.strip())
+    else:
+        cnt = 0
+        month_start = args_dict.start_yymm
+        month_end = args_dict.end_yymm
+        assert int(month_end) >= int(month_start)
+        start_id = int(month_start[:2]) * 12 + int(month_start[2:]) + 101
+        end_id = int(month_end[:2]) * 12 + int(month_end[2:]) + 101
+        for i in range(start_id, end_id + 1):
+            for j in range(1, submit_number[i] + 1):
+                cnt += 1
+                if cnt > args_dict.maximum:
+                    break
+                if i < 282:
+                    download_arxiv_id_list.append("{:02}{:02}.{:04}".format((i - 102) // 12, id2month(i), j))
+                else:
+                    download_arxiv_id_list.append("{:02}{:02}.{:05}".format((i - 102) // 12, id2month(i), j))
+    if not os.path.exists("arxiv_download_error.log"):
+        with open("arxiv_download_error.log", 'w') as ferr:
+            pass
+    if args_dict.process > 1:
+        logging.warning(
+            "Please notice that terms of Use for arXiv APIs limited the maximum connection to 1 every 3 seconds.")
+    pool = multiprocessing.Pool(processes=args_dict.process)
     manager = multiprocessing.Manager()
     metadata_list = manager.list()
-    for i in range(20, 21):
-        for j in range(10, 13):
-            for k in range(1, 18000):
-                id = "{:02}{:02}.{:05}".format(i, j, k)
-                # download_metadata("{:02}{:02}.{:05}".format(i, j, k), metadata_list)
-                pool.apply_async(download_metadata, (id, metadata_list,))
+    for i in download_arxiv_id_list:
+        pool.apply_async(download_metadata, (i, metadata_list,))
+        time.sleep(3)
     pool.close()
     pool.join()
-    with open("out.json", 'w') as fout:
+    with open("metadata_{0}.json".format(time.strftime("%y%m%d%H%M%S", time.localtime())), 'w') as fout:
         json.dump(list(metadata_list), fout)
