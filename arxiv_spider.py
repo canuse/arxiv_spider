@@ -70,7 +70,7 @@ def download_metadata(arxiv_id, output_file):
     try:
         xml_metadata = requests.get(
             "http://export.arxiv.org/oai2?verb=GetRecord&identifier=oai:arXiv.org:{0}&metadataPrefix=arXivRaw".format(
-                arxiv_id)).content.decode()
+                arxiv_id),timeout=5).content.decode()
         if "idDoesNotExist" in xml_metadata:
             return
         parse_metadata(xml_metadata, output_file)
