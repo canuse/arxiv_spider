@@ -59,7 +59,7 @@ def parse_metadata(xml_metadata, output_file):
                 [i.strip().split()[0].strip(), i.strip().split()[1].strip(), i.strip().split()[2].strip()])
     jsond = json.dumps(
         {'id': id, 'submitter': submitter, 'authors': authors, "title": title, "comments": comments, "doi": doi,
-         "journal_ref": journal_ref, "report_no": report_no, "categories": categories, "license": license,
+         "journal-ref": journal_ref, "report-no": report_no, "categories": categories, "license": license,
          "abstract": abstract, "versions": versions, "update_date": update_date,
          "authors_parsed": authors_parsed})
     with open(output_file, 'a+') as fout:
