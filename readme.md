@@ -8,8 +8,6 @@ A simple spider to crawl metadata of arxiv papers.
 
 Python 3.5+
 
-multiprocessing_logging (Install by running `pip install multiprocessing_logging`)
-
 ### Input arguments
 
 Run `python3 arxiv_spider.py -h` to see help, or refer to the following table:
@@ -49,6 +47,7 @@ The output format is identical to the official [arXiv Dataset](https://www.kaggl
 The metadata normally contains authors, abstract, title, submit time, doi(if there is), etc. More information on what was recorded can be seen [here](https://arxiv.org/help/bulk_data).
 
 The arxiv_id of all failure attempts will be saved in `arxiv_download_error.log`
+
 
 ## Common reason of failure
 

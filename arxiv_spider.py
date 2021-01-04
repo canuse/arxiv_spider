@@ -8,7 +8,6 @@ import multiprocessing
 from xml.dom.minidom import parseString
 import json
 import logging
-import multiprocessing_logging
 
 
 def parse_metadata(xml_metadata, output_file):
@@ -74,15 +73,11 @@ def download_metadata(arxiv_id, output_file):
         if "idDoesNotExist" in xml_metadata:
             return
         parse_metadata(xml_metadata, output_file)
-        logging.info("arxiv_id {0} finish".format(arxiv_id))
-        if sys.platform == 'win32':
-            print("INFO:arxiv_id {0} finish".format(arxiv_id))
+        print("INFO:arxiv_id {0} finish".format(arxiv_id))
 
         return
     except:
-        if sys.platform == 'win32':
-            print("ERROR:error in downloading metadata of arxiv_id {0}".format(arxiv_id))
-        logging.error("error in downloading metadata of arxiv_id {0}".format(arxiv_id))
+        print("ERROR:error in downloading metadata of arxiv_id {0}".format(arxiv_id))
         with open("arxiv_download_error.log", 'a+') as ferr:
             ferr.write("{0}\n".format(arxiv_id))
 
@@ -114,7 +109,6 @@ def id2month(i: int) -> int:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    multiprocessing_logging.install_mp_handler()
     args_dict = parse_argument(sys.argv[1:])
     download_arxiv_id_list = []
     try:
